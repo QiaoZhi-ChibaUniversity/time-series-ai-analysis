@@ -1,36 +1,121 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
+# 🌏 Time Series AI Analysis Platform  
+（リモートセンシング解析デモ）
 
-First, run the development server:
+🔗 Live Demo: https://time-series-ai-analysis.vercel.app
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🧭 Overview
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+This web application provides an interactive platform for analyzing time series data with a focus on remote sensing and ecosystem studies.  
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+It enables users to upload CSV datasets, visualize temporal dynamics, explore variable relationships, and perform both statistical and AI-assisted model interpretation.
 
-## Learn More
+本ツールは、時系列データ（特にリモートセンシング・生態系データ）の解析・可視化・モデル比較・AI解釈を統合したWebアプリケーションです。
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🎯 Key Capabilities
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 📂 Data Input
+- Upload CSV datasets
+- Automatic column detection
+- Flexible variable selection
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 📈 Visualization
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+#### Time Series
+- Plot temporal variation
+- Custom time range filtering
+- Missing values handled gracefully
+
+#### Scatter Analysis
+- Variable relationship exploration
+- Time-filtered scatter plots
+- Dual-variable comparison
+
+---
+
+### 🧹 Data Cleaning
+
+- Remove NaN values
+- Optional exclusion of zero values
+- Custom filtering options for invalid data
+
+---
+
+### 📊 Model Analysis
+
+#### Linear Model
+- Simple regression fitting
+- Baseline comparison
+
+#### Nonlinear Model (Saturating Response)
+- Suitable for:
+  - Light-response curves
+  - NIRvP–GPP relationships
+- Captures saturation effects at high input levels
+
+---
+
+### 📉 Model Comparison
+
+- AIC (Akaike Information Criterion)
+- Quantitative comparison:
+  - Linear vs Nonlinear performance
+- Model selection support
+
+---
+
+### 🤖 AI-Assisted Interpretation
+
+- Automatic explanation of:
+  - Trends
+  - Model differences
+  - Ecological implications
+- Helps interpret complex relationships without manual inspection
+
+---
+
+## 🌱 Scientific Context
+
+This tool is particularly designed for analyzing relationships such as:
+
+- NIRvP – GPP  
+- Reflectance – Photosynthesis  
+- Environmental drivers vs ecosystem response  
+
+At fine temporal scales, nonlinear saturation effects often dominate (e.g., light saturation in photosynthesis), while aggregated scales may appear more linear.  
+
+This platform enables direct exploration of these scale-dependent behaviors.
+
+---
+
+## 🧪 Typical Workflow
+
+1. Upload CSV file  
+2. Select time column and variables  
+3. Apply filters (optional)  
+4. Generate plots:
+   - Time series
+   - Scatter plots  
+5. Enable model fitting:
+   - Linear
+   - Nonlinear  
+6. Compare models (AIC)  
+7. Run AI analysis for interpretation  
+
+---
+
+## ⚙️ Technology Stack
+
+- Frontend & Backend: Next.js  
+- Deployment: Vercel  
+- Visualization: (Chart.js / Recharts)  
+- AI Integration: OpenAI API  
+
+le AI features:
