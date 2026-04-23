@@ -75,6 +75,7 @@ conversation history
 Output
 
 concise natural language explanation (JA / EN / ZH)
+
 🔹 Deployment
 Vercel (serverless)
 ⚙️ Data Processing
@@ -86,22 +87,22 @@ remove NaN / null / invalid values
 optional zero filtering
 3. Time Filtering
 user-defined time range
+
 📊 Modeling
 🔹 Linear Model
-slope
-intercept
-R²
-RMSE
-AIC
+
 🔹 Nonlinear Model
-Saturating exponential
+
+
 Used for:
 light-response curves
 NIRvP–GPP analysis
 
 🔹 Model Comparison
+
 AIC
 Akaike weights
+
 📈 Visualization
 Time Series
 temporal trends
@@ -110,6 +111,7 @@ missing values
 Scatter Plot
 relationship analysis
 optional model fitting
+
 🤖 AI-Assisted Analysis
 
 Automatically generates:
