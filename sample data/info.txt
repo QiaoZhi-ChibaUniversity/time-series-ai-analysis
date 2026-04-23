@@ -1,0 +1,36 @@
+Sample Data Description
+
+Column Definitions
+date: Observation date.
+GPP: Gross Primary Productivity.
+SW_IN_F: Incoming shortwave radiation (W/m²).
+PPFD_IN_F_MDS: Gap-filled photosynthetic photon flux density (µmol m^-2 s^-1).
+PPFD_IN_F_MDS_QC: Quality control flag for PPFD data.
+PAR_BK: Backup PAR estimated from shortwave radiation.
+PAR: Photosynthetically active radiation used in analysis.
+JAXAPAR: PAR derived from satellite data.
+window_start: Start date of the compositing window.
+window_end: End date of the compositing window.
+NIRV: Near-infrared reflectance of vegetation.
+window_id: Identifier of the compositing window.
+match_count: Number of valid matched observations in the window.
+NIRvP_PAR: NIRV multiplied by PAR.
+NIRvP_JAXAPAR: NIRV multiplied by JAXAPAR.
+
+Recommended Columns
+For basic analysis:
+date, GPP, NIRvP_PAR
+
+For comparison between PAR sources:
+date, GPP, NIRvP_PAR, NIRvP_JAXAPAR
+
+For quality control:
+PPFD_IN_F_MDS_QC, match_count
+
+For radiation-related interpretation:
+SW_IN_F, PAR, JAXAPAR, NIRV
+
+Notes
+NIRvP is calculated as NIRV × PAR or NIRV × JAXAPAR.
+Recommended dependent variable: GPP.
+Recommended explanatory variables: NIRvP_PAR and NIRvP_JAXAPAR.
