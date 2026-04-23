@@ -1,0 +1,29 @@
+date: observation time
+
+GPP: gross primary productivity
+
+SW_IN_F: incoming shortwave radiation (gap-filled)
+
+PPFD_IN_F_MDS: photosynthetic photon flux density (PPFD)
+
+PPFD_IN_F_MDS_QC: quality flag for PPFD
+
+PAR_BK: backup PAR (derived from shortwave radiation)
+
+PAR: primary PAR variable
+
+JAXAPAR: satellite-derived PAR (Himawari)
+
+window_start: start of time window
+
+window_end: end of time window
+
+NIRV: near-infrared reflectance of vegetation (NIR × NDVI)
+
+window_id: time window ID
+
+match_count: number of valid observations in the window
+
+NIRvP_PAR: NIRV × PAR
+
+NIRvP_JAXAPAR: NIRV × JAXAPAR
