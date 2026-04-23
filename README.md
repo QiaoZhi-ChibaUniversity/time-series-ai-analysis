@@ -3,6 +3,13 @@
 
 🔗 Live Demo: https://time-series-ai-analysis.vercel.app
 
+Update Log
+2026-04-23
+
+EN
+
+Added a sample dataset (sample file) for quick testing and demonstration
+Included a detailed column description document to help users better understand the data structure and variables
 ---
 
 ## 🧭 Overview
