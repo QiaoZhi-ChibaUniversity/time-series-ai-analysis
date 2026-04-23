@@ -1,146 +1,186 @@
-# 🌏 Time Series AI Analysis Platform  
-（リモートセンシング解析デモ）
 
-🔗 Live Demo: https://time-series-ai-analysis.vercel.app
 
 Update Log
 2026-04-23
 
-EN
 
 Added a sample dataset (sample file) for quick testing and demonstration
 Included a detailed column description document to help users better understand the data structure and variables
 ---
 
-## 🧭 Overview
+🌏 Time Series AI Analysis Platform
 
-This web application provides an interactive platform for analyzing time series data, with a focus on remote sensing and ecosystem studies.
+（Remote Sensing Data Analysis Demo）
 
-It enables users to upload CSV datasets, visualize temporal dynamics, explore variable relationships, and perform both statistical and AI-assisted model interpretation.
+🔗 Live Demo: https://time-series-ai-analysis.vercel.app
 
-本ツールは、時系列データ（特にリモートセンシング・生態系データ）の解析・可視化・モデル比較・AI解釈を統合したWebアプリケーションです。
+🧭 Overview
 
----
+This project is a full-stack web application for time-series data analysis, designed for remote sensing and ecosystem studies.
 
-## 🎯 Key Capabilities
+It supports CSV-based data exploration, visualization, statistical modeling, and AI-assisted interpretation in an integrated workflow.
 
-### 📂 Data Input
-- Upload CSV datasets  
-- Automatic column detection  
-- Flexible variable selection  
+Unlike traditional analysis tools, this platform combines:
 
----
+interactive visualization
+on-the-fly data processing
+model fitting and comparison
+AI-driven explanation
+🏗️ System Architecture
+🔹 Frontend (Client-side)
+Framework: Next.js (React)
+Language: TypeScript / JavaScript
+Visualization: Recharts
+Data Handling: PapaParse
 
-### 📈 Visualization
+The frontend is responsible for:
 
-#### Time Series
-- Plot temporal variation  
-- Custom time range filtering  
-- Missing values handled gracefully  
+CSV file upload and parsing
+column detection and variable selection
+data filtering and preprocessing
+time-series and scatter plot rendering
+model fitting (linear & nonlinear)
+AIC-based model comparison
 
-#### Scatter Analysis
-- Variable relationship exploration  
-- Time-filtered scatter plots  
-- Dual-variable comparison  
+👉 Most data processing and analysis logic runs directly in the browser.
 
----
+🔹 Backend (Server-side)
+Framework: Next.js API Routes
+Function: AI-assisted analysis
 
-### 🧹 Data Cleaning
-- Remove NaN values  
-- Optional exclusion of zero values  
-- Custom filtering options for invalid data  
+Backend responsibilities:
 
----
+receive structured chart summaries
+manage conversation history
+call OpenAI API for analysis
+return concise interpretation results
 
-### 📊 Model Analysis
+👉 Backend is lightweight, focused on AI interaction rather than data computation.
 
-#### Linear Model
-- Simple regression fitting  
-- Baseline comparison  
+🔹 AI Integration
+API: OpenAI API
+Model Usage: structured prompt-based analysis
 
-#### Nonlinear Model (Saturating Response)
-Suitable for:
-- Light-response curves  
-- NIRvP–GPP relationships  
+Features:
 
-Captures saturation effects at high input levels.
+automatic interpretation of trends
+explanation of model differences
+ecological reasoning (e.g., saturation effects)
 
----
+Input:
 
-### 📉 Model Comparison
-- AIC (Akaike Information Criterion)  
-- Quantitative comparison between linear and nonlinear models  
-- Model selection support  
+chart summary (statistics + sample points)
+user query + context
 
----
+Output:
 
-### 🤖 AI-Assisted Interpretation
-- Automatic explanation of trends  
-- Interpretation of model differences  
-- Ecological insight generation  
+concise natural language analysis (JA / EN / ZH)
+🔹 Deployment
+Platform: Vercel
+Type: Serverless full-stack deployment
 
-Helps users understand complex relationships without manual inspection.
 
----
+⚙️ Data Processing Pipeline
+1. Data Input
+CSV upload (client-side)
+automatic column detection
+2. Data Cleaning
+remove:
+empty values
+NaN / null / None
+invalid flags (±9999, -32768)
+optional zero filtering
+3. Time Filtering
+user-defined date range
+applied consistently to all analyses
+📊 Modeling & Analysis
+🔹 Linear Model
+Ordinary Least Squares (OLS)
+Outputs:
+slope
+intercept
+R²
+RMSE
+AIC
+🔹 Nonlinear Model (Saturating Exponential)
 
-## 🌱 Scientific Context
+Model form:
 
-This platform is designed for analyzing relationships such as:
+y = a(1 - exp(-b·x)) + c
 
-- NIRvP – GPP  
-- Reflectance – Photosynthesis  
-- Environmental drivers vs ecosystem response  
+Characteristics:
 
-At fine temporal scales, nonlinear saturation effects (e.g., light saturation in photosynthesis) are often dominant, while aggregated data may appear more linear.
+captures saturation behavior
+suitable for:
+light-response curves
+NIRvP–GPP relationships
+🔹 Model Comparison
+Akaike Information Criterion (AIC)
+Akaike weights
 
-This tool enables direct exploration of these scale-dependent behaviors.
+Used for:
 
----
+selecting best model
+quantifying relative model performance
+📈 Visualization
+Time Series
+temporal dynamics
+trend and variability
+missing data handling
+Scatter Plot
+variable relationships
+optional:
+linear fit
+nonlinear fit
+🤖 AI-Assisted Analysis
 
-## 🧪 Typical Workflow
+The system generates automatic interpretations based on:
 
-1. Upload CSV file  
-2. Select time column and variables  
-3. Apply filters (optional)  
-4. Generate plots:
-   - Time series  
-   - Scatter plots  
-5. Enable model fitting:
-   - Linear  
-   - Nonlinear  
-6. Compare models (AIC)  
-7. Run AI analysis  
+statistical summaries
+model fitting results
+data distribution
 
----
+Examples:
 
-## ⚙️ Technology Stack
+correlation strength
+saturation effects
+variability patterns
 
-- **Next.js** — full-stack framework  
-- **Vercel** — cloud deployment platform  
-- **Visualization Library** — for interactive plotting  
-- **OpenAI API** — AI-assisted analysis  
+👉 Designed to reduce manual inspection effort.
 
----
+🌱 Scientific Context
 
-## 🔐 Environment Configuration
+This tool is particularly useful for analyzing:
 
-AI-powered features rely on a secure API integration.
+NIRvP – GPP relationships
+Reflectance – Photosynthesis
+Environmental drivers vs ecosystem response
 
-Required environment variable:
-OPENAI_API_KEY
+Key insight:
 
-This key is configured securely in the deployment environment and is not exposed in the source code.
+Fine temporal scales → nonlinear saturation dominates
+Aggregated data → relationship appears more linear
+🧪 Typical Workflow
+Upload CSV
+Select columns
+Apply filters
+Generate plots
+Fit models
+Compare models (AIC)
+Run AI analysis
+⚙️ Technology Stack
+Frontend: Next.js / React
+Backend: Next.js API Routes
+Visualization: Recharts
+Data Processing: PapaParse
+AI: OpenAI API
+Deployment: Vercel
+👨‍🔬 Author
 
----
-
-## 👨‍🔬 Author
-
-Zhi Qiao  
-PhD Student, Remote Sensing  
+Zhi Qiao
+PhD Student, Remote Sensing
 Chiba University (CEReS)
 
----
-
-## 📄 License
+📄 License
 
 MIT License
