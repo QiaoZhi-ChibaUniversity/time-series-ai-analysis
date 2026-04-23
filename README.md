@@ -9,172 +9,125 @@ Included a detailed column description document to help users better understand 
 ---
 
 🌏 Time Series AI Analysis Platform
+Remote Sensing Data Analysis Demo
 
-（Remote Sensing Data Analysis Demo）
-
-🔗 Live Demo: https://time-series-ai-analysis.vercel.app
+🔗 Live Demo
+https://time-series-ai-analysis.vercel.app
 
 🧭 Overview
 
 This project is a full-stack web application for time-series data analysis, designed for remote sensing and ecosystem studies.
 
-It supports CSV-based data exploration, visualization, statistical modeling, and AI-assisted interpretation in an integrated workflow.
+It integrates:
 
-Unlike traditional analysis tools, this platform combines:
-
+data upload
 interactive visualization
-on-the-fly data processing
-model fitting and comparison
-AI-driven explanation
+statistical modeling
+AI-assisted interpretation
+
+into a single workflow.
+
 🏗️ System Architecture
-🔹 Frontend (Client-side)
-Framework: Next.js (React)
-Language: TypeScript / JavaScript
-Visualization: Recharts
-Data Handling: PapaParse
+🔹 Frontend
+Next.js (React)
+TypeScript / JavaScript
+Recharts (visualization)
+PapaParse (CSV parsing)
 
-The frontend is responsible for:
+Responsibilities
 
-CSV file upload and parsing
-column detection and variable selection
-data filtering and preprocessing
-time-series and scatter plot rendering
-model fitting (linear & nonlinear)
+CSV upload & parsing
+column detection
+data filtering & preprocessing
+visualization (time series / scatter)
+model fitting (linear / nonlinear)
 AIC-based model comparison
 
-👉 Most data processing and analysis logic runs directly in the browser.
+👉 Most analysis logic runs in the browser.
 
-🔹 Backend (Server-side)
-Framework: Next.js API Routes
-Function: AI-assisted analysis
+🔹 Backend
+Next.js API Routes
 
-Backend responsibilities:
+Responsibilities
 
-receive structured chart summaries
-manage conversation history
-call OpenAI API for analysis
-return concise interpretation results
+receive chart summaries
+manage chat context
+call OpenAI API
+return analysis results
 
-👉 Backend is lightweight, focused on AI interaction rather than data computation.
+👉 Lightweight server layer focused on AI integration.
 
 🔹 AI Integration
-API: OpenAI API
-Model Usage: structured prompt-based analysis
+OpenAI API
 
-Features:
+Features
 
-automatic interpretation of trends
-explanation of model differences
-ecological reasoning (e.g., saturation effects)
+trend explanation
+model comparison interpretation
+ecological insight generation
 
-Input:
+Input
 
-chart summary (statistics + sample points)
-user query + context
+chart summary
+user query
+conversation history
 
-Output:
+Output
 
-concise natural language analysis (JA / EN / ZH)
+concise natural language explanation (JA / EN / ZH)
 🔹 Deployment
-Platform: Vercel
-Type: Serverless full-stack deployment
-
-
-⚙️ Data Processing Pipeline
+Vercel (serverless)
+⚙️ Data Processing
 1. Data Input
-CSV upload (client-side)
+CSV upload
 automatic column detection
 2. Data Cleaning
-remove:
-empty values
-NaN / null / None
-invalid flags (±9999, -32768)
+remove NaN / null / invalid values
 optional zero filtering
 3. Time Filtering
-user-defined date range
-applied consistently to all analyses
-📊 Modeling & Analysis
+user-defined time range
+📊 Modeling
 🔹 Linear Model
-Ordinary Least Squares (OLS)
-Outputs:
 slope
 intercept
 R²
 RMSE
 AIC
-🔹 Nonlinear Model (Saturating Exponential)
-
-Model form:
-
-y = a(1 - exp(-b·x)) + c
-
-Characteristics:
-
-captures saturation behavior
-suitable for:
-light-response curves
-NIRvP–GPP relationships
-🔹 Model Comparison
-Akaike Information Criterion (AIC)
-Akaike weights
-
+🔹 Nonlinear Model
+Saturating exponential
 Used for:
+light-response curves
+NIRvP–GPP analysis
 
-selecting best model
-quantifying relative model performance
+🔹 Model Comparison
+AIC
+Akaike weights
 📈 Visualization
 Time Series
-temporal dynamics
-trend and variability
-missing data handling
+temporal trends
+variability
+missing values
 Scatter Plot
-variable relationships
-optional:
-linear fit
-nonlinear fit
+relationship analysis
+optional model fitting
 🤖 AI-Assisted Analysis
 
-The system generates automatic interpretations based on:
+Automatically generates:
 
-statistical summaries
-model fitting results
-data distribution
+correlation interpretation
+saturation detection
+variability explanation
 
-Examples:
-
-correlation strength
-saturation effects
-variability patterns
-
-👉 Designed to reduce manual inspection effort.
+👉 Helps users understand results without manual inspection.
 
 🌱 Scientific Context
 
-This tool is particularly useful for analyzing:
+Typical use cases:
 
-NIRvP – GPP relationships
+NIRvP – GPP
 Reflectance – Photosynthesis
 Environmental drivers vs ecosystem response
 
-Key insight:
-
-Fine temporal scales → nonlinear saturation dominates
-Aggregated data → relationship appears more linear
-🧪 Typical Workflow
-Upload CSV
-Select columns
-Apply filters
-Generate plots
-Fit models
-Compare models (AIC)
-Run AI analysis
-⚙️ Technology Stack
-Frontend: Next.js / React
-Backend: Next.js API Routes
-Visualization: Recharts
-Data Processing: PapaParse
-AI: OpenAI API
-Deployment: Vercel
 👨‍🔬 Author
 
 Zhi Qiao
