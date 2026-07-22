@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Papa, { ParseResult } from "papaparse";
+import { profileDataset } from "@/lib/dataset-profiler";
 import {
   LineChart,
   Line,
@@ -355,6 +356,14 @@ export default function Page() {
   const [activeAnalysisType, setActiveAnalysisType] = useState<AnalysisType | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [chatError, setChatError] = useState("");
+
+  const datasetProfile = useMemo(() => {
+    if (rawData.length === 0 || columns.length === 0) {
+      return null;
+    }
+
+    return profileDataset(rawData, columns);
+  }, [rawData, columns]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -858,6 +867,78 @@ export default function Page() {
                 )}
               </div>
             </div>
+
+            {datasetProfile && (
+              <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Dataset Profile
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-600">
+                  アップロードされたデータの構造と品質を自動的に確認した結果です。
+                </p>
+
+                <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">データタイプ</p>
+                    <p className="mt-2 text-lg font-bold text-slate-900">
+                      {datasetProfile.datasetType}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">行数</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">
+                      {datasetProfile.rowCount}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">列数</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">
+                      {datasetProfile.columnCount}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">重複行</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">
+                      {datasetProfile.duplicateRows}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm text-amber-700">空欄</p>
+                    <p className="mt-2 text-xl font-bold text-amber-900">
+                      {datasetProfile.cleaning.empty}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm text-amber-700">NaN / null</p>
+                    <p className="mt-2 text-xl font-bold text-amber-900">
+                      {datasetProfile.cleaning.missingText}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm text-amber-700">±9999</p>
+                    <p className="mt-2 text-xl font-bold text-amber-900">
+                      {datasetProfile.cleaning.sentinel9999}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm text-amber-700">-32768</p>
+                    <p className="mt-2 text-xl font-bold text-amber-900">
+                      {datasetProfile.cleaning.sentinel32768}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {columns.length > 0 && (
               <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
