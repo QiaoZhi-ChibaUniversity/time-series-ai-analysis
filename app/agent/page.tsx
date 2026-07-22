@@ -937,6 +937,77 @@ export default function Page() {
                     </p>
                   </div>
                 </div>
+
+                <div className="mt-6">
+                  <h3 className="text-base font-semibold text-slate-900">
+                    カラムプロファイル
+                  </h3>
+
+                  <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="min-w-full border-collapse bg-white text-sm">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                            カラム
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                            タイプ
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">
+                            有効数
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">
+                            欠損率
+                          </th>
+                          <th className="px-4 py-3 text-right font-semibold text-slate-700">
+                            ユニーク数
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                            範囲 / サンプル
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {datasetProfile.columns.map((column) => (
+                          <tr
+                            key={column.name}
+                            className="border-t border-slate-200 odd:bg-white even:bg-slate-50"
+                          >
+                            <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                              {column.name}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                                {column.type}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-slate-700">
+                              {column.validCount}
+                            </td>
+                            <td className="px-4 py-3 text-right text-slate-700">
+                              {(column.missingRate * 100).toFixed(1)}%
+                            </td>
+                            <td className="px-4 py-3 text-right text-slate-700">
+                              {column.uniqueCount}
+                            </td>
+                            <td className="min-w-56 px-4 py-3 text-slate-700">
+                              {column.type === "numeric" &&
+                              column.min !== undefined &&
+                              column.max !== undefined
+                                ? `${column.min.toFixed(4)} ～ ${column.max.toFixed(4)}${
+                                    column.mean !== undefined
+                                      ? `（平均 ${column.mean.toFixed(4)}）`
+                                      : ""
+                                  }`
+                                : column.sampleValues.join(", ") || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
 
