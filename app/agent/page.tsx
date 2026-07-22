@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Papa, { ParseResult } from "papaparse";
 import { profileDataset } from "@/lib/dataset-profiler";
+import { analyzeRelationship } from "@/lib/relationship-analysis";
 import {
   LineChart,
   Line,
@@ -59,6 +60,12 @@ type NonlinearFitResult = {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+};
+
+type AgentTraceItem = {
+  tool: string;
+  label: string;
+  status: "completed";
 };
 
 type LanguageOption = "ja" | "zh" | "en";
@@ -356,6 +363,7 @@ export default function Page() {
   const [activeAnalysisType, setActiveAnalysisType] = useState<AnalysisType | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [agentTrace, setAgentTrace] = useState<AgentTraceItem[]>([]);
 
   const datasetProfile = useMemo(() => {
     if (rawData.length === 0 || columns.length === 0) {
@@ -364,6 +372,10 @@ export default function Page() {
 
     return profileDataset(rawData, columns);
   }, [rawData, columns]);
+
+  const includeSaturationModel =
+    datasetProfile?.datasetType === "remote_sensing" ||
+    datasetProfile?.datasetType === "environmental";
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -415,6 +427,7 @@ export default function Page() {
         }
 
         setChatMessages([]);
+        setAgentTrace([]);
         setChatInput("");
         setChatError("");
         setActiveAnalysisType(null);
@@ -573,14 +586,20 @@ export default function Page() {
   }, [scatterData, showLinearFit]);
 
   const nonlinearFit = useMemo(() => {
-    if (!showNonlinearFit) return null;
+    if (!showNonlinearFit || !includeSaturationModel) return null;
     return fitSaturatingExpModel(scatterData);
-  }, [scatterData, showNonlinearFit]);
+  }, [scatterData, showNonlinearFit, includeSaturationModel]);
 
   const akaikeInfo = useMemo(() => {
     if (!linearFit || !nonlinearFit) return null;
     return calcAkaikeWeights(linearFit.aic, nonlinearFit.aic);
   }, [linearFit, nonlinearFit]);
+
+  const relationshipAnalysis = useMemo(() => {
+    return analyzeRelationship(scatterData, {
+      includeSaturation: includeSaturationModel,
+    });
+  }, [scatterData, includeSaturationModel]);
 
   const fitLines = useMemo(() => {
     const linearMap = new Map<number, FitPoint>();
@@ -646,6 +665,7 @@ export default function Page() {
       yMin: Math.min(...ys),
       yMax: Math.max(...ys),
       yMean: ys.reduce((a, b) => a + b, 0) / ys.length,
+      relationshipAnalysis,
       linearFit: linearFit
         ? {
             slope: linearFit.slope,
@@ -681,6 +701,7 @@ export default function Page() {
     linearFit,
     nonlinearFit,
     akaikeInfo,
+    relationshipAnalysis,
   ]);
 
   async function requestAnalysis(
@@ -715,20 +736,22 @@ export default function Page() {
     }
 
     setChatError("");
+    setAgentTrace([]);
     setIsAnalyzing(true);
     setActiveAnalysisType(analysisType);
 
     try {
-      const res = await fetch("/api/analyze-chat", {
+      const res = await fetch("/api/analyze-agent", {
         method: "POST",
         headers: {
           "Content-Type": "application/json; charset=utf-8",
         },
         body: JSON.stringify({
-          analysisType,
           language,
-          chartSummary,
-          messages: nextMessages,
+          datasetProfile,
+          timeSeriesSummary,
+          scatterSummary,
+          messages: chatMessages,
           userMessage,
         }),
       });
@@ -740,6 +763,22 @@ export default function Page() {
       }
 
       const replyText = String(data?.reply || "").trim();
+
+      if (Array.isArray(data?.trace)) {
+        setAgentTrace(
+          data.trace.filter(
+            (item: unknown): item is AgentTraceItem =>
+              typeof item === "object" &&
+              item !== null &&
+              "tool" in item &&
+              "label" in item &&
+              "status" in item &&
+              typeof item.tool === "string" &&
+              typeof item.label === "string" &&
+              item.status === "completed"
+          )
+        );
+      }
 
       setChatMessages((prev) => [
         ...prev,
@@ -1379,50 +1418,100 @@ export default function Page() {
                   </div>
 
                   <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">線形モデル R²</p>
+                    <p className="text-sm text-slate-500">Pearson r</p>
                     <p className="mt-2 text-2xl font-bold text-slate-900">
-                      {linearFit && !Number.isNaN(linearFit.r2)
-                        ? linearFit.r2.toFixed(4)
+                      {relationshipAnalysis.pearsonR !== null
+                        ? relationshipAnalysis.pearsonR.toFixed(4)
                         : "-"}
                     </p>
-                    {linearFit && (
-                      <p className="mt-2 text-xs leading-6 text-slate-600">
-                        y = {linearFit.slope.toFixed(4)}x +{" "}
-                        {linearFit.intercept.toFixed(4)}
-                      </p>
-                    )}
+                    <p className="mt-2 text-xs leading-6 text-slate-600">
+                      線形関係の強さ
+                    </p>
                   </div>
 
                   <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">非線形モデル R²</p>
+                    <p className="text-sm text-slate-500">Spearman ρ</p>
                     <p className="mt-2 text-2xl font-bold text-slate-900">
-                      {nonlinearFit && !Number.isNaN(nonlinearFit.r2)
-                        ? nonlinearFit.r2.toFixed(4)
+                      {relationshipAnalysis.spearmanRho !== null
+                        ? relationshipAnalysis.spearmanRho.toFixed(4)
                         : "-"}
                     </p>
-                    {nonlinearFit && (
-                      <p className="mt-2 text-xs leading-6 text-slate-600">
-                        y = {nonlinearFit.a.toFixed(4)}
-                        (1 - exp(-{nonlinearFit.b.toFixed(4)}x)) +{" "}
-                        {nonlinearFit.c.toFixed(4)}
-                      </p>
-                    )}
+                    <p className="mt-2 text-xs leading-6 text-slate-600">
+                      単調関係の強さ
+                    </p>
                   </div>
 
                   <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">BEST_MODEL</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">
-                      {akaikeInfo ? akaikeInfo.bestModel : "-"}
+                    <p className="text-sm text-slate-500">AUTO MODEL</p>
+                    <p className="mt-2 break-words text-lg font-bold text-slate-900">
+                      {relationshipAnalysis.recommendedModel ?? "-"}
                     </p>
-                    {akaikeInfo && (
-                      <p className="mt-2 text-xs leading-6 text-slate-600">
-                        ΔAIC(線形) = {akaikeInfo.deltaLinear.toFixed(2)}
-                        <br />
-                        ΔAIC(非線形) = {akaikeInfo.deltaNonlinear.toFixed(2)}
-                      </p>
-                    )}
+                    <p className="mt-2 text-xs leading-6 text-slate-600">
+                      {relationshipAnalysis.relationshipType}
+                    </p>
                   </div>
                 </div>
+
+                <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full border-collapse bg-white text-sm">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold text-slate-700">
+                          Model
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">
+                          R²
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">
+                          RMSE
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">
+                          CV RMSE
+                        </th>
+                        <th className="px-4 py-3 text-right font-semibold text-slate-700">
+                          AICc
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {relationshipAnalysis.candidateModels.map((model) => (
+                        <tr
+                          key={model.name}
+                          className={`border-t border-slate-200 ${
+                            model.name === relationshipAnalysis.recommendedModel
+                              ? "bg-emerald-50"
+                              : "bg-white"
+                          }`}
+                        >
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            {model.name}
+                            {model.name === relationshipAnalysis.recommendedModel
+                              ? " ✓"
+                              : ""}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700">
+                            {model.r2 !== null ? model.r2.toFixed(4) : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700">
+                            {model.rmse.toFixed(4)}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700">
+                            {model.cvRmse !== null
+                              ? model.cvRmse.toFixed(4)
+                              : "-"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-700">
+                            {model.aicc !== null ? model.aicc.toFixed(2) : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="mt-3 text-xs leading-6 text-slate-600">
+                  {relationshipAnalysis.recommendationReason}
+                </p>
 
                 {linearFit && nonlinearFit && akaikeInfo && (
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -1613,6 +1702,25 @@ export default function Page() {
                 </p>
               </div>
 
+              {agentTrace.length > 0 && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm font-semibold text-emerald-900">
+                    Agent Trace
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {agentTrace.map((item, index) => (
+                      <div
+                        key={`${item.tool}-${index}`}
+                        className="flex items-center gap-2 text-sm text-emerald-800"
+                      >
+                        <span aria-hidden="true">✓</span>
+                        <span>{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="h-[460px] overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-4">
                 {chatMessages.length === 0 ? (
                   <div className="text-sm leading-6 text-slate-500">
@@ -1698,6 +1806,7 @@ export default function Page() {
                   <button
                     onClick={() => {
                       setChatMessages([]);
+                      setAgentTrace([]);
                       setChatInput("");
                       setChatError("");
                       setActiveAnalysisType(null);
