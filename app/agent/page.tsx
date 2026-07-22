@@ -1,9 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Papa, { ParseResult } from "papaparse";
+import type { Database } from "sql.js";
 import { profileDataset } from "@/lib/dataset-profiler";
 import { analyzeRelationship } from "@/lib/relationship-analysis";
+import {
+  analyzeGroupedMetric,
+  analyzeNumericDistribution,
+} from "@/lib/general-analysis";
+import {
+  openSQLiteFile,
+  readSQLiteTable,
+  SQLITE_ONLINE_FILE_LIMIT_BYTES,
+  SQLITE_TABLE_ROW_LIMIT,
+} from "@/lib/sqlite-browser";
 import {
   LineChart,
   Line,
@@ -15,6 +26,8 @@ import {
   Legend,
   ScatterChart,
   Scatter,
+  BarChart,
+  Bar,
 } from "recharts";
 
 type RowData = Record<string, string>;
@@ -69,7 +82,10 @@ type AgentTraceItem = {
 };
 
 type LanguageOption = "ja" | "zh" | "en";
-type AnalysisType = "timeseries" | "scatter";
+type AnalysisType = "overview" | "timeseries" | "scatter";
+
+const GROUP_CHART_LIMIT = 12;
+const GROUP_TABLE_PAGE_SIZE = 20;
 
 const TIME_CANDIDATES = [
   "date",
@@ -335,12 +351,24 @@ export default function Page() {
   const [rawData, setRawData] = useState<RowData[]>([]);
   const [dataPreview, setDataPreview] = useState<RowData[]>([]);
   const [fileName, setFileName] = useState("");
+  const [dataSource, setDataSource] = useState<"csv" | "sqlite" | null>(null);
+  const [sqliteTables, setSqliteTables] = useState<string[]>([]);
+  const [selectedSqliteTable, setSelectedSqliteTable] = useState("");
+  const [sourceRowCount, setSourceRowCount] = useState<number | null>(null);
+  const [sourceNotice, setSourceNotice] = useState("");
+  const [fileError, setFileError] = useState("");
+  const [isLoadingFile, setIsLoadingFile] = useState(false);
+  const sqliteDatabaseRef = useRef<Database | null>(null);
 
   const [timeColumn, setTimeColumn] = useState("");
   const [timeValueColumn, setTimeValueColumn] = useState("");
 
   const [scatterXColumn, setScatterXColumn] = useState("");
   const [scatterYColumn, setScatterYColumn] = useState("");
+  const [distributionColumn, setDistributionColumn] = useState("");
+  const [groupColumn, setGroupColumn] = useState("");
+  const [groupValueColumn, setGroupValueColumn] = useState("");
+  const [groupPage, setGroupPage] = useState(0);
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -374,66 +402,168 @@ export default function Page() {
   }, [rawData, columns]);
 
   const includeSaturationModel =
-    datasetProfile?.datasetType === "remote_sensing" ||
-    datasetProfile?.datasetType === "environmental";
+    datasetProfile?.domainHint.label === "remote_sensing" ||
+    datasetProfile?.domainHint.label === "environmental";
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    return () => {
+      sqliteDatabaseRef.current?.close();
+      sqliteDatabaseRef.current = null;
+    };
+  }, []);
+
+  function loadDatasetRows(rows: RowData[], cols: string[]) {
+    setColumns(cols);
+    setRawData(rows);
+    setDataPreview(rows.slice(0, 5));
+
+    const uploadedProfile = profileDataset(rows, cols);
+    const datetimeCandidates = uploadedProfile.columns
+      .filter((column) => column.type === "datetime")
+      .map((column) => column.name);
+    const numericCandidates = uploadedProfile.columns
+      .filter((column) => column.type === "numeric")
+      .map((column) => column.name);
+    const categoricalCandidates = uploadedProfile.columns
+      .filter((column) => column.type === "categorical")
+      .map((column) => column.name);
+    const preferredGroupColumn =
+      uploadedProfile.columns.find(
+        (column) =>
+          column.type === "categorical" &&
+          column.uniqueCount > 1 &&
+          column.uniqueCount <= Math.min(20, Math.max(2, rows.length * 0.5))
+      )?.name || categoricalCandidates[0] || "";
+
+    const autoTime =
+      datetimeCandidates.find((column) => isLikelyTimeColumn(column)) ||
+      datetimeCandidates[0] ||
+      "";
+    const autoTimeValue = numericCandidates[0] || "";
+    const autoScatterX = numericCandidates[0] || "";
+    const autoScatterY = numericCandidates[1] || "";
+
+    setTimeColumn(autoTime);
+    setTimeValueColumn(autoTimeValue);
+    setScatterXColumn(autoScatterX);
+    setScatterYColumn(autoScatterY);
+    setDistributionColumn(numericCandidates[0] || "");
+    setGroupColumn(preferredGroupColumn);
+    setGroupValueColumn(numericCandidates[0] || "");
+    setGroupPage(0);
+    setShowTimeSeries(Boolean(autoTime && autoTimeValue));
+    setShowScatter(Boolean(autoScatterX && autoScatterY));
+
+    if (autoTime) {
+      const validDates = rows
+        .map((row) => parseDateValue(row[autoTime]))
+        .filter((date): date is Date => date !== null)
+        .sort((left, right) => left.getTime() - right.getTime());
+      setStartDate(validDates.length > 0 ? formatDateForInput(validDates[0]) : "");
+      setEndDate(
+        validDates.length > 0
+          ? formatDateForInput(validDates[validDates.length - 1])
+          : ""
+      );
+    } else {
+      setStartDate("");
+      setEndDate("");
+    }
+
+    setChatMessages([]);
+    setAgentTrace([]);
+    setChatInput("");
+    setChatError("");
+    setActiveAnalysisType("overview");
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setFileName(file.name);
+    setFileError("");
+    setSourceNotice("");
+    setIsLoadingFile(true);
 
-    Papa.parse<RowData>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results: ParseResult<RowData>) => {
-        const cols = results.meta.fields || [];
-        const rows = results.data;
+    try {
+      const extension = file.name.split(".").pop()?.toLowerCase();
 
-        setColumns(cols);
-        setRawData(rows);
-        setDataPreview(rows.slice(0, 5));
+      if (extension === "csv") {
+        sqliteDatabaseRef.current?.close();
+        sqliteDatabaseRef.current = null;
+        setSqliteTables([]);
+        setSelectedSqliteTable("");
+        setDataSource("csv");
 
-        const autoTime =
-          cols.find((c) => isLikelyTimeColumn(c)) || cols[0] || "";
+        await new Promise<void>((resolve, reject) => {
+          Papa.parse<RowData>(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results: ParseResult<RowData>) => {
+              if (results.errors.length > 0 && results.data.length === 0) {
+                reject(new Error(results.errors[0]?.message || "CSV parse failed."));
+                return;
+              }
+              const cols = results.meta.fields || [];
+              loadDatasetRows(results.data, cols);
+              setSourceRowCount(results.data.length);
+              resolve();
+            },
+            error: (error) => reject(error),
+          });
+        });
+        return;
+      }
 
-        const numericCandidates = cols.filter((c) => !isLikelyTimeColumn(c));
+      if (extension === "db" || extension === "sqlite" || extension === "sqlite3") {
+        sqliteDatabaseRef.current?.close();
+        sqliteDatabaseRef.current = null;
+        const { database, tables } = await openSQLiteFile(file);
+        sqliteDatabaseRef.current = database;
+        setDataSource("sqlite");
+        setSqliteTables(tables);
+        setSelectedSqliteTable(tables[0]);
 
-        const autoTimeValue = numericCandidates[0] || "";
-        const autoScatterX = numericCandidates[0] || "";
-        const autoScatterY = numericCandidates[1] || numericCandidates[0] || "";
+        const tableData = readSQLiteTable(database, tables[0]);
+        loadDatasetRows(tableData.rows, tableData.columns);
+        setSourceRowCount(tableData.totalRowCount);
+        setSourceNotice(
+          tableData.truncated
+            ? `Loaded ${tableData.loadedRowCount.toLocaleString()} of ${tableData.totalRowCount.toLocaleString()} rows for browser analysis.`
+            : `Loaded all ${tableData.loadedRowCount.toLocaleString()} rows from table ${tables[0]}.`
+        );
+        return;
+      }
 
-        setTimeColumn(autoTime);
-        setTimeValueColumn(autoTimeValue);
-        setScatterXColumn(autoScatterX);
-        setScatterYColumn(autoScatterY);
-
-        if (autoTime) {
-          const validDates = rows
-            .map((row) => parseDateValue(row[autoTime]))
-            .filter((d): d is Date => d !== null)
-            .sort((a, b) => a.getTime() - b.getTime());
-
-          if (validDates.length > 0) {
-            setStartDate(formatDateForInput(validDates[0]));
-            setEndDate(formatDateForInput(validDates[validDates.length - 1]));
-          } else {
-            setStartDate("");
-            setEndDate("");
-          }
-        } else {
-          setStartDate("");
-          setEndDate("");
-        }
-
-        setChatMessages([]);
-        setAgentTrace([]);
-        setChatInput("");
-        setChatError("");
-        setActiveAnalysisType(null);
-      },
-    });
+      throw new Error("Please select a CSV or SQLite (.db/.sqlite/.sqlite3) file.");
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoadingFile(false);
+      e.target.value = "";
+    }
   };
+
+  function handleSQLiteTableChange(tableName: string) {
+    const database = sqliteDatabaseRef.current;
+    if (!database) return;
+
+    try {
+      setFileError("");
+      const tableData = readSQLiteTable(database, tableName);
+      setSelectedSqliteTable(tableName);
+      loadDatasetRows(tableData.rows, tableData.columns);
+      setSourceRowCount(tableData.totalRowCount);
+      setSourceNotice(
+        tableData.truncated
+          ? `Loaded ${tableData.loadedRowCount.toLocaleString()} of ${tableData.totalRowCount.toLocaleString()} rows for browser analysis.`
+          : `Loaded all ${tableData.loadedRowCount.toLocaleString()} rows from table ${tableName}.`
+      );
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : String(error));
+    }
+  }
 
   const isInvalidTextValue = (value: string) => {
     const v = normalizeText(value);
@@ -577,8 +707,48 @@ export default function Page() {
   }, [timeSeriesData]);
 
   const numericColumns = useMemo(() => {
-    return columns.filter((c) => !isLikelyTimeColumn(c));
-  }, [columns]);
+    return (
+      datasetProfile?.columns
+        .filter((column) => column.type === "numeric")
+        .map((column) => column.name) ?? []
+    );
+  }, [datasetProfile]);
+
+  const datetimeColumns = useMemo(() => {
+    return (
+      datasetProfile?.columns
+        .filter((column) => column.type === "datetime")
+        .map((column) => column.name) ?? []
+    );
+  }, [datasetProfile]);
+
+  const categoricalColumns = useMemo(() => {
+    return (
+      datasetProfile?.columns
+        .filter((column) => column.type === "categorical")
+        .map((column) => column.name) ?? []
+    );
+  }, [datasetProfile]);
+
+  const numericDistribution = useMemo(
+    () => analyzeNumericDistribution(rawData, distributionColumn),
+    [rawData, distributionColumn]
+  );
+
+  const groupedMetrics = useMemo(
+    () => analyzeGroupedMetric(rawData, groupColumn, groupValueColumn),
+    [rawData, groupColumn, groupValueColumn]
+  );
+
+  const chartGroupedMetrics = groupedMetrics.slice(0, GROUP_CHART_LIMIT);
+  const groupPageCount = Math.max(
+    1,
+    Math.ceil(groupedMetrics.length / GROUP_TABLE_PAGE_SIZE)
+  );
+  const visibleGroupedMetrics = groupedMetrics.slice(
+    groupPage * GROUP_TABLE_PAGE_SIZE,
+    (groupPage + 1) * GROUP_TABLE_PAGE_SIZE
+  );
 
   const linearFit = useMemo(() => {
     if (!showLinearFit) return null;
@@ -710,7 +880,11 @@ export default function Page() {
     visibleUserMessage?: string
   ) {
     const chartSummary =
-      analysisType === "timeseries" ? timeSeriesSummary : scatterSummary;
+      analysisType === "timeseries"
+        ? timeSeriesSummary
+        : analysisType === "scatter"
+        ? scatterSummary
+        : datasetProfile;
 
     if (!chartSummary) {
       setChatError(
@@ -718,7 +892,7 @@ export default function Page() {
           ? "分析対象のデータがありません。"
           : language === "zh"
           ? "当前没有可分析的数据。"
-          : "No chart data is available for analysis."
+          : "No dataset is available for analysis."
       );
       return;
     }
@@ -851,15 +1025,21 @@ export default function Page() {
 
     const analysisType: AnalysisType | null =
       activeAnalysisType ??
-      (scatterSummary ? "scatter" : timeSeriesSummary ? "timeseries" : null);
+      (datasetProfile
+        ? "overview"
+        : scatterSummary
+        ? "scatter"
+        : timeSeriesSummary
+        ? "timeseries"
+        : null);
 
     if (!analysisType) {
       setChatError(
         language === "ja"
-          ? "先に図を読み込み、分析対象を選んでください。"
+          ? "先にデータセットを読み込んでください。"
           : language === "zh"
-          ? "请先加载图表并选择分析对象。"
-          : "Please load a chart and choose an analysis target first."
+          ? "请先加载数据集。"
+          : "Please load a dataset first."
       );
       return;
     }
@@ -875,11 +1055,10 @@ export default function Page() {
           <div>
             <div className="mb-10">
               <h1 className="text-4xl font-bold text-slate-900">
-                リモートセンシング解析デモ
+                Dataset Analysis Agent
               </h1>
               <p className="mt-3 text-slate-600">
-                CSVデータを読み込み、カラム選択・期間指定・無効値除外を行ったうえで時系列および散布図を可視化し、
-                線形・非線形の関係とAIC比較を簡易解析するウェブアプリケーション
+                CSVデータの型と品質を自動判定し、利用可能な場合だけ時系列・変数関係を分析する汎用データ解析デモ
               </p>
             </div>
 
@@ -890,18 +1069,70 @@ export default function Page() {
 
               <div className="mt-4">
                 <label className="inline-block cursor-pointer rounded-xl bg-slate-900 px-4 py-2 text-white transition hover:bg-slate-700">
-                  CSVファイルを選択
+                  CSV / SQLite ファイルを選択
                   <input
                     type="file"
-                    accept=".csv"
+                    accept=".csv,.db,.sqlite,.sqlite3"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
                 </label>
 
+                <p className="mt-3 text-sm text-slate-500">
+                  SQLiteオンラインモード: 最大 {Math.round(
+                    SQLITE_ONLINE_FILE_LIMIT_BYTES / 1024 / 1024
+                  )} MB、分析対象は1テーブル最大 {SQLITE_TABLE_ROW_LIMIT.toLocaleString()} 行です。
+                </p>
+
+                {isLoadingFile && (
+                  <p className="mt-3 text-sm font-medium text-blue-700">
+                    ファイルを読み込んでいます...
+                  </p>
+                )}
+
                 {fileName && (
                   <p className="mt-3 text-sm text-slate-600">
                     選択されたファイル: {fileName}
+                    {dataSource ? `（${dataSource}）` : ""}
+                  </p>
+                )}
+
+                {fileError && (
+                  <p className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                    {fileError}
+                  </p>
+                )}
+
+                {dataSource === "sqlite" && sqliteTables.length > 0 && (
+                  <div className="mt-4 max-w-xl">
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      SQLite テーブル
+                    </label>
+                    <select
+                      value={selectedSqliteTable}
+                      onChange={(event) =>
+                        handleSQLiteTableChange(event.target.value)
+                      }
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-slate-500"
+                    >
+                      {sqliteTables.map((table) => (
+                        <option key={table} value={table}>
+                          {table}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {sourceNotice && (
+                  <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                    {sourceNotice}
+                  </p>
+                )}
+
+                {sourceRowCount !== null && (
+                  <p className="mt-2 text-sm text-slate-500">
+                    データソースの行数: {sourceRowCount.toLocaleString()}
                   </p>
                 )}
               </div>
@@ -917,11 +1148,21 @@ export default function Page() {
                   アップロードされたデータの構造と品質を自動的に確認した結果です。
                 </p>
 
-                <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                   <div className="rounded-xl bg-slate-50 p-4">
-                    <p className="text-sm text-slate-500">データタイプ</p>
+                    <p className="text-sm text-slate-500">データ構造</p>
                     <p className="mt-2 text-lg font-bold text-slate-900">
-                      {datasetProfile.datasetType}
+                      {datasetProfile.structureType}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <p className="text-sm text-slate-500">分野ヒント</p>
+                    <p className="mt-2 text-lg font-bold text-slate-900">
+                      {datasetProfile.domainHint.label}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      confidence: {datasetProfile.domainHint.confidence}
                     </p>
                   </div>
 
@@ -946,6 +1187,12 @@ export default function Page() {
                     </p>
                   </div>
                 </div>
+
+                {datasetProfile.domainHint.reasons.length > 0 && (
+                  <p className="mt-3 text-sm text-slate-600">
+                    分野推定の根拠: {datasetProfile.domainHint.reasons.join(", ")}
+                  </p>
+                )}
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -999,7 +1246,7 @@ export default function Page() {
                             欠損率
                           </th>
                           <th className="px-4 py-3 text-right font-semibold text-slate-700">
-                            ユニーク数
+                            ユニーク数 / 率
                           </th>
                           <th className="px-4 py-3 text-left font-semibold text-slate-700">
                             範囲 / サンプル
@@ -1017,9 +1264,20 @@ export default function Page() {
                               {column.name}
                             </td>
                             <td className="whitespace-nowrap px-4 py-3">
-                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                              <span
+                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  column.type === "identifier"
+                                    ? "bg-violet-50 text-violet-700"
+                                    : "bg-blue-50 text-blue-700"
+                                }`}
+                              >
                                 {column.type}
                               </span>
+                              {column.highCardinality && (
+                                <span className="ml-2 rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                                  high-cardinality
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-right text-slate-700">
                               {column.validCount}
@@ -1028,7 +1286,7 @@ export default function Page() {
                               {(column.missingRate * 100).toFixed(1)}%
                             </td>
                             <td className="px-4 py-3 text-right text-slate-700">
-                              {column.uniqueCount}
+                              {column.uniqueCount} / {(column.uniqueRatio * 100).toFixed(1)}%
                             </td>
                             <td className="min-w-56 px-4 py-3 text-slate-700">
                               {column.type === "numeric" &&
@@ -1077,41 +1335,53 @@ export default function Page() {
                   </h2>
 
                   <div className="mt-4 space-y-3">
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={showTimeSeries}
-                        onChange={(e) => setShowTimeSeries(e.target.checked)}
-                      />
-                      時系列グラフを表示する
-                    </label>
+                    {datetimeColumns.length > 0 && (
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={showTimeSeries}
+                          onChange={(e) => setShowTimeSeries(e.target.checked)}
+                        />
+                        時系列グラフを表示する
+                      </label>
+                    )}
 
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={showScatter}
-                        onChange={(e) => setShowScatter(e.target.checked)}
-                      />
-                      散布図を表示する
-                    </label>
+                    {numericColumns.length >= 2 && (
+                      <>
+                        <label className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={showScatter}
+                            onChange={(e) => setShowScatter(e.target.checked)}
+                          />
+                          散布図を表示する
+                        </label>
 
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={showLinearFit}
-                        onChange={(e) => setShowLinearFit(e.target.checked)}
-                      />
-                      線形フィットを表示する
-                    </label>
+                        <label className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={showLinearFit}
+                            onChange={(e) => setShowLinearFit(e.target.checked)}
+                          />
+                          線形フィットを表示する
+                        </label>
 
-                    <label className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={showNonlinearFit}
-                        onChange={(e) => setShowNonlinearFit(e.target.checked)}
-                      />
-                      非線形フィットを表示する
-                    </label>
+                        <label className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={showNonlinearFit}
+                            onChange={(e) => setShowNonlinearFit(e.target.checked)}
+                          />
+                          非線形フィットを表示する
+                        </label>
+                      </>
+                    )}
+
+                    {datetimeColumns.length === 0 && (
+                      <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                        日付カラムがないため、時系列分析は表示されません。
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1186,7 +1456,11 @@ export default function Page() {
                 </h2>
 
                 <div className="mt-6 grid gap-6 lg:grid-cols-2">
-                  <div className="space-y-4">
+                  <div
+                    className={
+                      datetimeColumns.length > 0 ? "space-y-4" : "hidden"
+                    }
+                  >
                     <h3 className="text-lg font-semibold text-slate-800">
                       時系列グラフ設定
                     </h3>
@@ -1201,7 +1475,7 @@ export default function Page() {
                         className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-slate-500"
                       >
                         <option value="">選択してください</option>
-                        {columns.map((col) => (
+                        {datetimeColumns.map((col) => (
                           <option key={col} value={col}>
                             {col}
                           </option>
@@ -1254,7 +1528,11 @@ export default function Page() {
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div
+                    className={
+                      numericColumns.length >= 2 ? "space-y-4" : "hidden"
+                    }
+                  >
                     <h3 className="text-lg font-semibold text-slate-800">
                       散布図設定
                     </h3>
@@ -1300,6 +1578,225 @@ export default function Page() {
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {numericColumns.length > 0 && (
+              <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  汎用分析設定
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">
+                  日付カラムがなくても、数値分布とカテゴリ別の差を分析できます。
+                </p>
+
+                <div className="mt-5 grid gap-5 lg:grid-cols-3">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-700">
+                      分布を調べる数値カラム
+                    </label>
+                    <select
+                      value={distributionColumn}
+                      onChange={(event) =>
+                        setDistributionColumn(event.target.value)
+                      }
+                      className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-slate-500"
+                    >
+                      {numericColumns.map((column) => (
+                        <option key={column} value={column}>
+                          {column}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {categoricalColumns.length > 0 && (
+                    <>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          グループ化するカテゴリ
+                        </label>
+                        <select
+                          value={groupColumn}
+                          onChange={(event) => {
+                            setGroupColumn(event.target.value);
+                            setGroupPage(0);
+                          }}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-slate-500"
+                        >
+                          {categoricalColumns.map((column) => (
+                            <option key={column} value={column}>
+                              {column}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-700">
+                          比較する数値カラム
+                        </label>
+                        <select
+                          value={groupValueColumn}
+                          onChange={(event) =>
+                            setGroupValueColumn(event.target.value)
+                          }
+                          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none focus:border-slate-500"
+                        >
+                          {numericColumns.map((column) => (
+                            <option key={column} value={column}>
+                              {column}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {numericDistribution && (
+              <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    数値分布
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    対象カラム: {numericDistribution.column}
+                  </p>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    ["有効数", numericDistribution.count.toLocaleString()],
+                    ["除外・欠損", numericDistribution.missingCount.toLocaleString()],
+                    ["平均", numericDistribution.mean.toFixed(2)],
+                    ["標準偏差", numericDistribution.standardDeviation.toFixed(2)],
+                    ["最小値", numericDistribution.min.toFixed(2)],
+                    ["第1四分位", numericDistribution.q1.toFixed(2)],
+                    ["中央値", numericDistribution.median.toFixed(2)],
+                    ["第3四分位", numericDistribution.q3.toFixed(2)],
+                    ["最大値", numericDistribution.max.toFixed(2)],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-xl bg-slate-50 p-4">
+                      <p className="text-sm text-slate-500">{label}</p>
+                      <p className="mt-2 text-xl font-bold text-slate-900">
+                        {value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {groupedMetrics.length > 0 && (
+              <div className="mt-6 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+                <div>
+                  <h2 className="text-xl font-semibold text-slate-900">
+                    カテゴリ別比較
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {groupColumn} ごとの {groupValueColumn} 平均
+                  </p>
+                  {groupedMetrics.length > GROUP_CHART_LIMIT && (
+                    <p className="mt-1 text-sm text-amber-700">
+                      グラフは全 {groupedMetrics.length} グループ中、件数の多い上位
+                      {GROUP_CHART_LIMIT} グループを表示しています。表では全グループを確認できます。
+                    </p>
+                  )}
+                </div>
+
+                <div className="mt-6 h-[340px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartGroupedMetrics}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="category" />
+                      <YAxis />
+                      <Tooltip
+                        formatter={(value) =>
+                          typeof value === "number" ? value.toFixed(2) : "-"
+                        }
+                      />
+                      <Bar dataKey="mean" name="平均値" fill="#2563eb" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="mt-5 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-100 text-slate-700">
+                      <tr>
+                        <th className="px-4 py-3 text-left">カテゴリ</th>
+                        <th className="px-4 py-3 text-right">行数</th>
+                        <th className="px-4 py-3 text-right">有効数</th>
+                        <th className="px-4 py-3 text-right">平均</th>
+                        <th className="px-4 py-3 text-right">最小</th>
+                        <th className="px-4 py-3 text-right">最大</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleGroupedMetrics.map((group) => (
+                        <tr key={group.category} className="border-t border-slate-200">
+                          <td className="px-4 py-3 font-medium text-slate-900">
+                            {group.category}
+                          </td>
+                          <td className="px-4 py-3 text-right">{group.rowCount}</td>
+                          <td className="px-4 py-3 text-right">{group.validCount}</td>
+                          <td className="px-4 py-3 text-right">
+                            {group.mean?.toFixed(2) ?? "-"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {group.min?.toFixed(2) ?? "-"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {group.max?.toFixed(2) ?? "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {groupedMetrics.length > GROUP_TABLE_PAGE_SIZE && (
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-slate-600">
+                      {groupPage * GROUP_TABLE_PAGE_SIZE + 1}–
+                      {Math.min(
+                        (groupPage + 1) * GROUP_TABLE_PAGE_SIZE,
+                        groupedMetrics.length
+                      )}{" "}
+                      / {groupedMetrics.length} グループ
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setGroupPage((page) => Math.max(0, page - 1))
+                        }
+                        disabled={groupPage === 0}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        前へ
+                      </button>
+                      <span className="px-3 py-2 text-sm text-slate-600">
+                        {groupPage + 1} / {groupPageCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setGroupPage((page) =>
+                            Math.min(groupPageCount - 1, page + 1)
+                          )
+                        }
+                        disabled={groupPage >= groupPageCount - 1}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        次へ
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1693,6 +2190,12 @@ export default function Page() {
                         : language === "zh"
                         ? "散点图"
                         : "Scatter"
+                      : activeAnalysisType === "overview"
+                      ? language === "ja"
+                        ? "データセット概要"
+                        : language === "zh"
+                        ? "数据集概览"
+                        : "Dataset overview"
                       : language === "ja"
                       ? "未選択"
                       : language === "zh"
