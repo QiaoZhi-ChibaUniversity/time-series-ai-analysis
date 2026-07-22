@@ -1,3 +1,17 @@
+# Dataset Analysis Agent
+
+A browser-first, evidence-grounded AI agent for exploring CSV, TSV, and SQLite datasets with deterministic statistical analysis and traceable conclusions.
+
+## Live Demo
+
+### [Open the Dataset Analysis Agent](https://time-series-ai-analysis.vercel.app/)
+
+The interface supports Japanese, English, and Chinese. The root URL automatically opens the latest `/agent` application.
+
+> Try it with the included sample dataset, or upload your own CSV / SQLite file.
+
+---
+
 ## Update Log — 2026-07-22
 
 ### Dataset Analysis Agent v2
