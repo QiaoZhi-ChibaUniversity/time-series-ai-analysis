@@ -6,6 +6,13 @@ export type ColumnType =
   | "datetime"
   | "categorical"
   | "unknown";
+export type ColumnRole =
+  | "identifier"
+  | "measure"
+  | "dimension"
+  | "time"
+  | "geospatial"
+  | "text";
 
 export type StructureType = "general" | "timeseries";
 export type DomainLabel = "unknown" | "environmental" | "remote_sensing";
@@ -14,6 +21,7 @@ export type DomainConfidence = "none" | "medium" | "high";
 export type ColumnProfile = {
   name: string;
   type: ColumnType;
+  role: ColumnRole;
   validCount: number;
   missingCount: number;
   missingRate: number;
@@ -64,9 +72,43 @@ const REMOTE_SIGNALS: Array<{ keywords: string[]; weight: number }> = [
 ];
 
 const ENVIRONMENTAL_SIGNALS: Array<{ keywords: string[]; weight: number }> = [
-  { keywords: ["precipitation", "rainfall", "soil_moisture"], weight: 3 },
-  { keywords: ["temperature", "humidity", "wind_speed"], weight: 2 },
-  { keywords: ["air_quality", "water_quality", "radiation"], weight: 3 },
+  {
+    keywords: [
+      "precipitation",
+      "rainfall",
+      "soil_moisture",
+      "降水",
+      "降雨",
+      "土壌水分",
+    ],
+    weight: 3,
+  },
+  {
+    keywords: [
+      "temperature",
+      "humidity",
+      "wind_speed",
+      "気温",
+      "水温",
+      "湿度",
+      "風速",
+      "天候",
+    ],
+    weight: 2,
+  },
+  {
+    keywords: [
+      "air_quality",
+      "water_quality",
+      "radiation",
+      "水質",
+      "採水",
+      "水深",
+      "大気質",
+      "放射",
+    ],
+    weight: 3,
+  },
 ];
 
 function normalizeValue(value: unknown) {
@@ -130,6 +172,23 @@ function inferColumnType(columnName: string, validValues: string[]): ColumnType 
   return "categorical";
 }
 
+function inferColumnRole(
+  columnName: string,
+  type: ColumnType,
+  uniqueRatio: number,
+  uniqueCount: number
+): ColumnRole {
+  const name = normalizeColumnName(columnName);
+  if (type === "identifier") return "identifier";
+  if (type === "datetime") return "time";
+  if (/^(lat|latitude|lon|lng|longitude)$/.test(name)) return "geospatial";
+  if (type === "numeric") return "measure";
+  if (type === "categorical" && uniqueCount > 50 && uniqueRatio > 0.8) {
+    return "text";
+  }
+  return "dimension";
+}
+
 function profileColumn(rows: RowData[], columnName: string): ColumnProfile {
   const values = rows.map((row) => normalizeValue(row[columnName]));
   const validValues = values.filter((value) => !isMissingValue(value));
@@ -142,6 +201,7 @@ function profileColumn(rows: RowData[], columnName: string): ColumnProfile {
   const profile: ColumnProfile = {
     name: columnName,
     type,
+    role: inferColumnRole(columnName, type, uniqueRatio, uniqueValues.length),
     validCount: validValues.length,
     missingCount,
     missingRate: values.length === 0 ? 0 : missingCount / values.length,

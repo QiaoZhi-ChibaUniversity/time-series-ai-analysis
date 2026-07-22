@@ -9,15 +9,30 @@ type Language = "ja" | "zh" | "en";
 
 type AgentRequestBody = {
   language?: unknown;
+  analysisType?: unknown;
   userMessage?: unknown;
   messages?: unknown;
   datasetProfile?: unknown;
   timeSeriesSummary?: unknown;
   scatterSummary?: unknown;
+  distributionSummary?: unknown;
+  groupSummary?: unknown;
+  outlierSummary?: unknown;
+  relationshipRankingSummary?: unknown;
+  temporalAggregationSummary?: unknown;
+  analysisPlanResult?: unknown;
+  evidenceRecords?: unknown;
 };
 
 type ToolName =
   | "inspect_data_quality"
+  | "analyze_distribution"
+  | "detect_outliers"
+  | "rank_relationships"
+  | "analyze_temporal_aggregation"
+  | "inspect_analysis_plan"
+  | "inspect_evidence_catalog"
+  | "compare_groups"
   | "analyze_time_series"
   | "analyze_relationship";
 
@@ -26,6 +41,19 @@ type AgentTraceItem = {
   label: string;
   status: "completed";
 };
+
+function requestedToolName(value: unknown): ToolName | null {
+  if (value === "overview") return "inspect_data_quality";
+  if (value === "timeseries") return "analyze_time_series";
+  if (value === "temporal_aggregate") return "analyze_temporal_aggregation";
+  if (value === "distribution") return "analyze_distribution";
+  if (value === "outliers") return "detect_outliers";
+  if (value === "ranking") return "rank_relationships";
+  if (value === "scatter") return "analyze_relationship";
+  if (value === "group") return "compare_groups";
+  if (value === "plan") return "inspect_analysis_plan";
+  return null;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -44,16 +72,37 @@ function toolLabel(name: ToolName, language: Language) {
   const labels: Record<Language, Record<ToolName, string>> = {
     ja: {
       inspect_data_quality: "データ品質を確認",
+      analyze_distribution: "数値分布を分析",
+      detect_outliers: "IQR外れ値を検出",
+      rank_relationships: "全数値列の関係をランキング",
+      analyze_temporal_aggregation: "月別・年別集計を分析",
+      inspect_analysis_plan: "汎用分析プランの結果を確認",
+      inspect_evidence_catalog: "根拠カタログを確認",
+      compare_groups: "グループ間の差を比較",
       analyze_time_series: "時系列傾向を分析",
       analyze_relationship: "変数関係と候補モデルを分析",
     },
     zh: {
       inspect_data_quality: "检查数据质量",
+      analyze_distribution: "分析数值分布",
+      detect_outliers: "检测IQR异常值",
+      rank_relationships: "对全部数值列关系进行排名",
+      analyze_temporal_aggregation: "分析月度或年度聚合",
+      inspect_analysis_plan: "检查通用分析计划结果",
+      inspect_evidence_catalog: "检查证据目录",
+      compare_groups: "比较组间差异",
       analyze_time_series: "分析时间序列",
       analyze_relationship: "分析变量关系和候选模型",
     },
     en: {
       inspect_data_quality: "Inspect data quality",
+      analyze_distribution: "Analyze numeric distribution",
+      detect_outliers: "Detect IQR outliers",
+      rank_relationships: "Rank relationships across numeric columns",
+      analyze_temporal_aggregation: "Analyze monthly or annual aggregation",
+      inspect_analysis_plan: "Inspect generic analysis-plan results",
+      inspect_evidence_catalog: "Inspect evidence catalog",
+      compare_groups: "Compare groups",
       analyze_time_series: "Analyze time-series trend",
       analyze_relationship: "Analyze relationships and candidate models",
     },
@@ -126,6 +175,108 @@ function buildTools(body: AgentRequestBody): OpenAI.Responses.Tool[] {
     });
   }
 
+  if (isRecord(body.distributionSummary)) {
+    tools.push({
+      type: "function",
+      name: "analyze_distribution",
+      description:
+        "Retrieve deterministic distribution statistics for the selected numeric column, including count, missing count, quartiles, mean, standard deviation, minimum, and maximum.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      strict: true,
+    });
+  }
+
+  if (isRecord(body.groupSummary)) {
+    tools.push({
+      type: "function",
+      name: "compare_groups",
+      description:
+        "Retrieve deterministic grouped statistics for the selected categorical and numeric columns, including group counts, means, minima, and maxima.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      strict: true,
+    });
+  }
+
+  if (isRecord(body.outlierSummary)) {
+    tools.push({
+      type: "function",
+      name: "detect_outliers",
+      description:
+        "Retrieve deterministic IQR outlier evidence, including fences, counts, rate, low/high split, coverage, and sample outlier values.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      strict: true,
+    });
+  }
+
+  if (isRecord(body.relationshipRankingSummary)) {
+    tools.push({
+      type: "function",
+      name: "rank_relationships",
+      description:
+        "Retrieve a deterministic ranking of every numeric candidate against a target column using Pearson and Spearman coefficients and valid-pair counts.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      strict: true,
+    });
+  }
+
+  if (isRecord(body.temporalAggregationSummary)) {
+    tools.push({
+      type: "function",
+      name: "analyze_temporal_aggregation",
+      description:
+        "Retrieve deterministic monthly or annual aggregates, including count, mean, median, minimum, maximum, coverage, and annual trend slope when available.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+      strict: true,
+    });
+  }
+
+  if (isRecord(body.analysisPlanResult)) {
+    tools.push({
+      type: "function",
+      name: "inspect_analysis_plan",
+      description:
+        "Retrieve the validated generic analysis plan and its browser-executed filtered, grouped, aggregated, sorted, and limited result.",
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+      strict: true,
+    });
+  }
+
+  if (Array.isArray(body.evidenceRecords) && body.evidenceRecords.length > 0) {
+    tools.push({
+      type: "function",
+      name: "inspect_evidence_catalog",
+      description:
+        "Retrieve traceable evidence records with evidence IDs, tool names, row coverage, timestamps, and structured summaries. Cite relevant IDs in the final answer.",
+      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
+      strict: true,
+    });
+  }
+
   if (isRecord(body.scatterSummary)) {
     tools.push({
       type: "function",
@@ -154,6 +305,40 @@ function executeTool(name: string, body: AgentRequestBody) {
     return body.timeSeriesSummary;
   }
 
+  if (name === "analyze_distribution" && isRecord(body.distributionSummary)) {
+    return body.distributionSummary;
+  }
+
+  if (name === "compare_groups" && isRecord(body.groupSummary)) {
+    return body.groupSummary;
+  }
+
+  if (name === "detect_outliers" && isRecord(body.outlierSummary)) {
+    return body.outlierSummary;
+  }
+
+  if (
+    name === "rank_relationships" &&
+    isRecord(body.relationshipRankingSummary)
+  ) {
+    return body.relationshipRankingSummary;
+  }
+
+  if (
+    name === "analyze_temporal_aggregation" &&
+    isRecord(body.temporalAggregationSummary)
+  ) {
+    return body.temporalAggregationSummary;
+  }
+
+  if (name === "inspect_analysis_plan" && isRecord(body.analysisPlanResult)) {
+    return body.analysisPlanResult;
+  }
+
+  if (name === "inspect_evidence_catalog" && Array.isArray(body.evidenceRecords)) {
+    return body.evidenceRecords.slice(-12);
+  }
+
   if (name === "analyze_relationship" && isRecord(body.scatterSummary)) {
     return body.scatterSummary;
   }
@@ -166,6 +351,13 @@ function executeTool(name: string, body: AgentRequestBody) {
 function isToolName(value: string): value is ToolName {
   return (
     value === "inspect_data_quality" ||
+    value === "analyze_distribution" ||
+    value === "detect_outliers" ||
+    value === "rank_relationships" ||
+    value === "analyze_temporal_aggregation" ||
+    value === "inspect_analysis_plan" ||
+    value === "inspect_evidence_catalog" ||
+    value === "compare_groups" ||
     value === "analyze_time_series" ||
     value === "analyze_relationship"
   );
@@ -216,13 +408,18 @@ export async function POST(req: NextRequest) {
 You are a tabular dataset analysis agent.
 Use the provided tools to obtain numerical evidence before answering.
 Never invent columns, statistics, trends, correlations, or model results.
-Start by inspecting data quality when that tool is available.
+The application selected analysis type ${String(body.analysisType ?? "unknown")}. Use the matching analysis tool first and do not replace it with the dataset overview.
 Use additional tools only when relevant to the user's question.
 If the evidence is insufficient, state that clearly.
+Treat sampled observations as examples only, never as proof of a full-period trend.
+Do not infer monthly, seasonal, annual, or year-over-year patterns from overall minimum, maximum, mean, date range, or a small sample. Such claims require temporal aggregation evidence.
+Do not claim that one variable is the strongest relationship unless relationship-ranking evidence is available.
+Do not claim outliers exist unless an outlier tool result or explicit distribution evidence supports it.
+When evidence records are available, cite supporting evidence IDs in square brackets such as [ev_001]. Do not cite an evidence ID that does not support the claim.
 ${languageInstruction(language)}
 `;
 
-    let input: OpenAI.Responses.ResponseInput = [
+    const input: OpenAI.Responses.ResponseInput = [
       ...conversationMessages,
       {
         role: "user",
@@ -230,12 +427,27 @@ ${languageInstruction(language)}
       },
     ];
 
+    const requestedTool = requestedToolName(body.analysisType);
+    const requestedToolAvailable =
+      requestedTool !== null &&
+      tools.some((tool) => "name" in tool && tool.name === requestedTool);
+    const activeTools = requestedToolAvailable
+      ? tools.filter(
+          (tool) =>
+            "name" in tool &&
+            (tool.name === requestedTool || tool.name === "inspect_evidence_catalog")
+        )
+      : tools;
+
     let response = await client.responses.create({
       model: "gpt-4.1-mini",
+      temperature: 0,
       instructions,
       input,
-      tools,
-      tool_choice: "required",
+      tools: activeTools,
+      tool_choice: requestedToolAvailable
+        ? { type: "function", name: requestedTool }
+        : "required",
     });
 
     const trace: AgentTraceItem[] = [];
@@ -271,23 +483,44 @@ ${languageInstruction(language)}
 
       response = await client.responses.create({
         model: "gpt-4.1-mini",
+        temperature: 0,
         instructions,
         input,
-        tools,
+        tools: activeTools,
         tool_choice: "auto",
       });
     }
 
     if (response.output.some((item) => item.type === "function_call")) {
+      const remainingFunctionCalls = response.output.filter(
+        (item) => item.type === "function_call"
+      );
       input.push(
         ...(response.output as unknown as OpenAI.Responses.ResponseInput)
       );
 
+      for (const call of remainingFunctionCalls) {
+        const output = executeTool(call.name, body);
+        input.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output: JSON.stringify(output),
+        });
+        if (isToolName(call.name)) {
+          trace.push({
+            tool: call.name,
+            label: toolLabel(call.name, language),
+            status: "completed",
+          });
+        }
+      }
+
       response = await client.responses.create({
         model: "gpt-4.1-mini",
+        temperature: 0,
         instructions,
         input,
-        tools,
+        tools: activeTools,
         tool_choice: "none",
       });
     }
