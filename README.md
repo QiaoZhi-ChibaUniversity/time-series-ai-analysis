@@ -12,6 +12,15 @@ The interface supports Japanese, English, and Chinese. The root URL automaticall
 
 ---
 
+## Update Log — 2026-07-24
+
+### Added a Japanese water-temperature sample dataset
+
+- Added `sample data/water_temperature_imazuoki_17B.csv`, containing water-temperature and observation-condition records from the Imazu offshore central site (17B).
+- The file retains its original Japanese CP932 / Shift_JIS encoding and can be used to demonstrate automatic character-encoding detection, date-field recognition, weather-category grouping, and time-series analysis.
+
+---
+
 ## Update Log — 2026-07-22
 
 ### Dataset Analysis Agent v2
